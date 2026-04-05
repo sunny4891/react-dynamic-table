@@ -1,7 +1,8 @@
 import axios from "axios";
+import config from "../config/config"; // ✅ import config
 
 const API = axios.create({
-  baseURL: "https://jsonplaceholder.typicode.com",
+  baseURL: config.API_BASE_URL, // ✅ use config
 });
 
 // Simulated server-side API
@@ -28,22 +29,19 @@ export const fetchUsers = async ({ page, limit, search, sortBy, order }) => {
     });
   }
 
-  // 🔥 sorting (simulate server)
+  // 🔥 sorting
   if (sortBy && sortBy !== "") {
     data.sort((a, b) => {
       let aVal = a[sortBy] || "";
       let bVal = b[sortBy] || "";
 
-      // Check if both values are numeric
       const aNum = Number(aVal);
       const bNum = Number(bVal);
 
       if (!isNaN(aNum) && !isNaN(bNum)) {
-        // Numeric comparison
         return order === "asc" ? aNum - bNum : bNum - aNum;
       }
 
-      // String comparison
       aVal = String(aVal).toLowerCase();
       bVal = String(bVal).toLowerCase();
 
