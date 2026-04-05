@@ -21,6 +21,7 @@ import {
 
 import { CSS } from "@dnd-kit/utilities";
 import { styled } from "@mui/material/styles";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 // 🔹 Styled Row Component (moved outside for global access)
 const StyledRow = styled(TableRow)(({ theme }) => ({
@@ -151,6 +152,22 @@ const ReusableTable = memo(
 
     // Memoized sorted columns
     const sortedColumns = useMemo(() => columnOrder, [columnOrder]);
+
+    const [scrollElement, setScrollElement] = useState(null);
+
+    const rowVirtualizer = useVirtualizer({
+      count: data.length,
+      getScrollElement: () => scrollElement,
+      estimateSize: () => 53,
+      overscan: 5,
+    });
+
+    const virtualItems = useMemo(
+      () => rowVirtualizer.getVirtualItems(),
+      [rowVirtualizer],
+    );
+
+    const shouldUseVirtual = scrollElement && virtualItems.length > 0;
 
     const gridTemplateColumns = useMemo(
       () =>
@@ -285,63 +302,144 @@ const ReusableTable = memo(
               </div>
 
               {/* Table Body */}
-              <div style={{ maxHeight: "400px", overflow: "auto" }}>
-                {data.map((row, index) => {
-                  const isSelected = selectedRows.includes(row.id);
+              <div
+                ref={setScrollElement}
+                style={{
+                  height: "400px",
+                  overflow: "auto",
+                  position: "relative",
+                }}
+              >
+                {shouldUseVirtual ? (
+                  <div
+                    style={{
+                      height: `${rowVirtualizer.getTotalSize()}px`,
+                      width: "100%",
+                      position: "relative",
+                    }}
+                  >
+                    {virtualItems.map((virtualRow) => {
+                      const row = data[virtualRow.index];
+                      const isSelected = selectedRows.includes(row.id);
 
-                  return (
-                    <div
-                      key={row.id}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: gridTemplateColumns,
-                        alignItems: "center",
-                        padding: "8px 16px",
-                        borderBottom: "1px solid #e0e0e0",
-                        backgroundColor: isSelected
-                          ? "#bbdefb"
-                          : index % 2 === 0
-                            ? "#f9f9f9"
-                            : "transparent",
-                      }}
-                    >
-                      {/* Row Checkbox */}
-                      <div style={{ width: "50px", flexShrink: 0 }}>
-                        <Checkbox
-                          checked={isSelected}
-                          onChange={() => handleRowSelect(row.id)}
-                          sx={{ padding: "4px" }}
-                        />
-                      </div>
-
-                      {/* Row Data */}
-                      {sortedColumns.map((col) => (
+                      return (
                         <div
-                          key={col.field}
+                          key={row.id}
                           style={{
-                            ...(col.width
-                              ? {
-                                  width: col.width,
-                                  minWidth: col.width,
-                                  maxWidth: col.width,
-                                  flexShrink: 0,
-                                  boxSizing: "border-box",
-                                  padding: "4px 4px",
-                                  textAlign:
-                                    col.field === "id" ? "center" : "left",
-                                }
-                              : { width: "100%", padding: "4px 8px" }),
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: "100%",
+                            height: `${virtualRow.size}px`,
+                            transform: `translateY(${virtualRow.start}px)`,
+                            display: "grid",
+                            gridTemplateColumns: gridTemplateColumns,
+                            alignItems: "center",
+                            padding: "8px 16px",
+                            borderBottom: "1px solid #e0e0e0",
+                            backgroundColor: isSelected
+                              ? "#bbdefb"
+                              : virtualRow.index % 2 === 0
+                                ? "#f9f9f9"
+                                : "transparent",
                           }}
                         >
-                          {row[col.field]}
+                          {/* Row Checkbox */}
+                          <div style={{ width: "50px", flexShrink: 0 }}>
+                            <Checkbox
+                              checked={isSelected}
+                              onChange={() => handleRowSelect(row.id)}
+                              sx={{ padding: "4px" }}
+                            />
+                          </div>
+
+                          {/* Row Data */}
+                          {sortedColumns.map((col) => (
+                            <div
+                              key={col.field}
+                              style={{
+                                ...(col.width
+                                  ? {
+                                      width: col.width,
+                                      minWidth: col.width,
+                                      maxWidth: col.width,
+                                      flexShrink: 0,
+                                      boxSizing: "border-box",
+                                      padding: "4px 4px",
+                                      textAlign:
+                                        col.field === "id" ? "center" : "left",
+                                    }
+                                  : { width: "100%", padding: "4px 8px" }),
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {row[col.field]}
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
-                  );
-                })}
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div>
+                    {data.map((row, index) => {
+                      const isSelected = selectedRows.includes(row.id);
+
+                      return (
+                        <div
+                          key={row.id}
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: gridTemplateColumns,
+                            alignItems: "center",
+                            padding: "8px 16px",
+                            borderBottom: "1px solid #e0e0e0",
+                            backgroundColor: isSelected
+                              ? "#bbdefb"
+                              : index % 2 === 0
+                                ? "#f9f9f9"
+                                : "transparent",
+                          }}
+                        >
+                          <div style={{ width: "50px", flexShrink: 0 }}>
+                            <Checkbox
+                              checked={isSelected}
+                              onChange={() => handleRowSelect(row.id)}
+                              sx={{ padding: "4px" }}
+                            />
+                          </div>
+
+                          {sortedColumns.map((col) => (
+                            <div
+                              key={col.field}
+                              style={{
+                                ...(col.width
+                                  ? {
+                                      width: col.width,
+                                      minWidth: col.width,
+                                      maxWidth: col.width,
+                                      flexShrink: 0,
+                                      boxSizing: "border-box",
+                                      padding: "4px 4px",
+                                      textAlign:
+                                        col.field === "id" ? "center" : "left",
+                                    }
+                                  : { width: "100%", padding: "4px 8px" }),
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {row[col.field]}
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           </SortableContext>

@@ -14,7 +14,7 @@ const UsersPage = () => {
   const [orderBy, setOrderBy] = useState("");
 
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(5);
+  const [rowsPerPage, setRowsPerPage] = useState(20);
   const [search, setSearch] = useState("");
 
   const debouncedSearch = useDebounce(search, 500);

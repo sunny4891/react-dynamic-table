@@ -1,13 +1,8 @@
 import axios from "axios";
-import config from "../config/config"; // ✅ import config
-
-const API = axios.create({
-  baseURL: config.API_BASE_URL, // ✅ use config
-});
 
 // Simulated server-side API
 export const fetchUsers = async ({ page, limit, search, sortBy, order }) => {
-  const res = await API.get("/users");
+  const res = await axios.get("https://jsonplaceholder.typicode.com/users");
   let data = res.data;
 
   // 🔍 search across multiple fields
