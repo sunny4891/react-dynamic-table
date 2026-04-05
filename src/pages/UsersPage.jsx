@@ -30,7 +30,7 @@ const UsersPage = () => {
         order: order,
       }),
     );
-  }, [page, rowsPerPage, debouncedSearch, order, orderBy]);
+  }, [dispatch, page, rowsPerPage, debouncedSearch, order, orderBy]);
 
   const columns = [
     { field: "id", headerName: "ID" },
