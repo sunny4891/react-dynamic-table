@@ -12,6 +12,9 @@ import {
 } from "@mui/material";
 
 import { DndContext, closestCenter } from "@dnd-kit/core";
+import { Checkbox } from "@mui/material";
+import { useDispatch, useSelector } from "react-redux";
+import { toggleRowSelection, selectAllRows } from "../store/tableSlice";
 
 import {
   SortableContext,
@@ -21,6 +24,7 @@ import {
 } from "@dnd-kit/sortable";
 
 import { CSS } from "@dnd-kit/utilities";
+import { styled } from "@mui/material/styles";
 
 // 🔹 Draggable Header Cell
 const DraggableHeader = ({ column, handleSort, orderBy, order }) => {
@@ -119,6 +123,13 @@ const ReusableTable = ({
   onSortChange,
 }) => {
   const [columnOrder, setColumnOrder] = useState(columns);
+  const dispatch = useDispatch();
+  const selectedRows = useSelector((state) => state.table.selectedRows);
+  const StyledRow = styled(TableRow)(({ theme }) => ({
+    "&.selected": {
+      backgroundColor: "#bbdefb",
+    },
+  }));
 
   // 🔹 Sorting
   const handleSort = (field) => {
@@ -152,6 +163,26 @@ const ReusableTable = ({
             <Table>
               <TableHead>
                 <TableRow>
+                  {/* ✅ Select All */}
+                  <TableCell>
+                    <Checkbox
+                      checked={
+                        data.length > 0 && selectedRows.length === data.length
+                      }
+                      indeterminate={
+                        selectedRows.length > 0 &&
+                        selectedRows.length < data.length
+                      }
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          dispatch(selectAllRows(data.map((row) => row.id)));
+                        } else {
+                          dispatch(selectAllRows([]));
+                        }
+                      }}
+                    />
+                  </TableCell>
+
                   {columnOrder.map((col) => (
                     <DraggableHeader
                       key={col.field}
@@ -165,13 +196,25 @@ const ReusableTable = ({
               </TableHead>
 
               <TableBody>
-                {data.map((row) => (
-                  <TableRow key={row.id}>
-                    {columnOrder.map((col) => (
-                      <TableCell key={col.field}>{row[col.field]}</TableCell>
-                    ))}
-                  </TableRow>
-                ))}
+                {data.map((row) => {
+                  const isSelected = selectedRows.includes(row.id);
+
+                  return (
+                    <StyledRow key={row.id}>
+                      {/* ✅ Row Checkbox */}
+                      <TableCell>
+                        <Checkbox
+                          checked={isSelected}
+                          onChange={() => dispatch(toggleRowSelection(row.id))}
+                        />
+                      </TableCell>
+
+                      {columnOrder.map((col) => (
+                        <TableCell key={col.field}>{row[col.field]}</TableCell>
+                      ))}
+                    </StyledRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </TableContainer>

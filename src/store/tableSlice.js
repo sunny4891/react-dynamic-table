@@ -6,6 +6,7 @@ const initialState = {
   total: 0,
   loading: false,
   error: null,
+  selectedRows: [], // ✅ NEW
 };
 
 const tableSlice = createSlice({
@@ -28,7 +29,23 @@ const tableSlice = createSlice({
       state.columnVisibility[tableId][field] =
         !state.columnVisibility[tableId][field];
     },
+    toggleRowSelection: (state, action) => {
+      const id = action.payload;
 
+      if (state.selectedRows.includes(id)) {
+        state.selectedRows = state.selectedRows.filter((rowId) => rowId !== id);
+      } else {
+        state.selectedRows.push(id);
+      }
+    },
+
+    selectAllRows: (state, action) => {
+      state.selectedRows = action.payload; // array of all ids
+    },
+
+    clearSelection: (state) => {
+      state.selectedRows = [];
+    },
     // 🔹 Saga triggers
     fetchUsersRequest: (state) => {
       state.loading = true;
@@ -50,6 +67,9 @@ const tableSlice = createSlice({
 export const {
   initializeColumns,
   toggleColumn,
+  toggleRowSelection,
+  selectAllRows,
+  clearSelection,
   fetchUsersRequest,
   fetchUsersSuccess,
   fetchUsersFailure,
