@@ -1,10 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useCallback, memo } from "react";
 import {
-  Table,
-  TableBody,
   TableCell,
-  TableContainer,
-  TableHead,
   TableRow,
   TableSortLabel,
   TablePagination,
@@ -25,9 +21,31 @@ import {
 
 import { CSS } from "@dnd-kit/utilities";
 import { styled } from "@mui/material/styles";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
-// 🔹 Draggable Header Cell
-const DraggableHeader = ({ column, handleSort, orderBy, order }) => {
+// 🔹 Styled Row Component (moved outside for global access)
+const StyledRow = styled(TableRow)(({ theme }) => ({
+  "&.selected": {
+    backgroundColor: "#bbdefb",
+  },
+}));
+
+// 🔹 Memoized Row Component
+const TableRowItem = memo(({ row, sortedColumns, isSelected, onRowSelect }) => (
+  <StyledRow className={isSelected ? "selected" : ""}>
+    <TableCell>
+      <Checkbox checked={isSelected} onChange={() => onRowSelect(row.id)} />
+    </TableCell>
+    {sortedColumns.map((col) => (
+      <TableCell key={col.field}>{row[col.field]}</TableCell>
+    ))}
+  </StyledRow>
+));
+
+TableRowItem.displayName = "TableRowItem";
+
+// 🔹 Draggable Column Header Component
+const DraggableColumnHeader = memo(({ column, handleSort, orderBy, order }) => {
   const {
     attributes,
     listeners,
@@ -39,152 +57,228 @@ const DraggableHeader = ({ column, handleSort, orderBy, order }) => {
     id: column.field,
   });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
+  const style = useMemo(
+    () => ({
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.5 : 1,
+    }),
+    [transform, transition, isDragging],
+  );
 
   return (
-    <TableCell
+    <div
       ref={setNodeRef}
-      style={style}
-      sx={{
-        fontWeight: 700,
-        fontSize: "16px",
-        textTransform: "uppercase",
-        letterSpacing: "0.5px",
-        backgroundColor: "#1976d2",
-        color: "#fff",
+      style={{
+        ...style,
+        flex: 1,
+        padding: "4px 8px",
+        cursor: "pointer",
         userSelect: "none",
         touchAction: "none",
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
       }}
     >
+      {/* Drag Handle */}
       <div
+        {...attributes}
+        {...listeners}
         style={{
+          cursor: isDragging ? "grabbing" : "grab",
+          padding: "4px",
+          borderRadius: "2px",
           display: "flex",
           alignItems: "center",
-          gap: "8px",
+        }}
+        onMouseDown={(e) => e.stopPropagation()}
+      >
+        ⋮⋮
+      </div>
+
+      {/* Sort Label */}
+      <TableSortLabel
+        active={orderBy === column.field}
+        direction={order}
+        onClick={(e) => {
+          e.stopPropagation();
+          handleSort(column.field);
+        }}
+        sx={{
+          color: "inherit",
+          flex: 1,
+          "&:hover": {
+            color: "inherit",
+          },
+          "& .MuiTableSortLabel__icon": {
+            color: "inherit !important",
+          },
         }}
       >
-        {/* Drag Handle */}
-        <div
-          {...attributes}
-          {...listeners}
-          style={{
-            cursor: isDragging ? "grabbing" : "grab",
-            padding: "4px",
-            borderRadius: "2px",
-            display: "flex",
-            alignItems: "center",
-          }}
-          onMouseDown={(e) => e.stopPropagation()}
-        >
-          ⋮⋮
-        </div>
-
-        {/* Sort Label */}
-        <TableSortLabel
-          active={orderBy === column.field}
-          direction={order}
-          onClick={(e) => {
-            e.stopPropagation();
-            handleSort(column.field);
-          }}
-          sx={{
-            color: "inherit",
-            flex: 1,
-            "&:hover": {
-              color: "inherit",
-            },
-            "& .MuiTableSortLabel__icon": {
-              color: "inherit !important",
-            },
-          }}
-        >
-          {column.headerName}
-        </TableSortLabel>
-      </div>
-    </TableCell>
+        {column.headerName}
+      </TableSortLabel>
+    </div>
   );
-};
+});
 
-const ReusableTable = ({
-  columns,
-  data,
-  loading,
-  total,
-  page,
-  rowsPerPage,
-  setPage,
-  setRowsPerPage,
-  order,
-  orderBy,
-  onSortChange,
-}) => {
-  const [columnOrder, setColumnOrder] = useState(columns);
-  const dispatch = useDispatch();
-  const selectedRows = useSelector((state) => state.table.selectedRows);
-  const StyledRow = styled(TableRow)(({ theme }) => ({
-    "&.selected": {
-      backgroundColor: "#bbdefb",
-    },
-  }));
+DraggableColumnHeader.displayName = "DraggableColumnHeader";
 
-  // 🔹 Sorting
-  const handleSort = (field) => {
-    const isAsc = orderBy === field && order === "asc";
-    const newOrder = isAsc ? "desc" : "asc";
+const ReusableTable = memo(
+  ({
+    columns,
+    data,
+    loading,
+    total,
+    page,
+    rowsPerPage,
+    setPage,
+    setRowsPerPage,
+    order,
+    orderBy,
+    onSortChange,
+  }) => {
+    const [columnOrder, setColumnOrder] = useState(columns);
+    const dispatch = useDispatch();
+    const selectedRows = useSelector((state) => state.table.selectedRows);
 
-    onSortChange(field, newOrder);
-    setPage(0); // reset page
-  };
+    // Memoized sorted columns
+    const sortedColumns = useMemo(() => columnOrder, [columnOrder]);
 
-  // 🔹 Drag End Logic
-  const handleDragEnd = (event) => {
-    const { active, over } = event;
+    // Virtualization setup
+    const parentRef = React.useRef();
 
-    if (active.id !== over?.id) {
-      const oldIndex = columnOrder.findIndex((c) => c.field === active.id);
-      const newIndex = columnOrder.findIndex((c) => c.field === over.id);
+    const rowVirtualizer = useVirtualizer({
+      count: data.length,
+      getScrollElement: () => parentRef.current,
+      estimateSize: () => 53, // Estimated row height
+      overscan: 10, // Render 10 extra rows outside visible area
+    });
 
-      setColumnOrder(arrayMove(columnOrder, oldIndex, newIndex));
-    }
-  };
+    // Memoized virtual items
+    const virtualItems = useMemo(
+      () => rowVirtualizer.getVirtualItems(),
+      [rowVirtualizer],
+    );
 
-  return (
-    <Paper>
-      <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext
-          items={columnOrder.map((c) => c.field)}
-          strategy={horizontalListSortingStrategy}
+    // Memoized handlers
+    const handleSort = useCallback(
+      (field) => {
+        const isAsc = orderBy === field && order === "asc";
+        const newOrder = isAsc ? "desc" : "asc";
+
+        onSortChange(field, newOrder);
+        setPage(0); // reset page
+      },
+      [orderBy, order, onSortChange, setPage],
+    );
+
+    const handleDragEnd = useCallback(
+      (event) => {
+        const { active, over } = event;
+
+        if (active.id !== over?.id) {
+          const oldIndex = sortedColumns.findIndex(
+            (c) => c.field === active.id,
+          );
+          const newIndex = sortedColumns.findIndex((c) => c.field === over.id);
+
+          setColumnOrder(arrayMove(sortedColumns, oldIndex, newIndex));
+        }
+      },
+      [sortedColumns],
+    );
+
+    const handleSelectAll = useCallback(
+      (e) => {
+        if (e.target.checked) {
+          dispatch(selectAllRows(data.map((row) => row.id)));
+        } else {
+          dispatch(selectAllRows([]));
+        }
+      },
+      [dispatch, data],
+    );
+
+    const handleRowSelect = useCallback(
+      (rowId) => {
+        dispatch(toggleRowSelection(rowId));
+      },
+      [dispatch],
+    );
+
+    // Memoized selected rows check
+    const allSelected = useMemo(
+      () => data.length > 0 && selectedRows.length === data.length,
+      [data.length, selectedRows.length],
+    );
+
+    const someSelected = useMemo(
+      () => selectedRows.length > 0 && selectedRows.length < data.length,
+      [selectedRows.length, data.length],
+    );
+
+    return (
+      <Paper>
+        <DndContext
+          collisionDetection={closestCenter}
+          onDragEnd={handleDragEnd}
         >
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  {/* ✅ Select All */}
-                  <TableCell>
+          <SortableContext
+            items={sortedColumns.map((c) => c.field)}
+            strategy={horizontalListSortingStrategy}
+          >
+            {/* Virtualized Table Container */}
+            <div
+              ref={parentRef}
+              style={{
+                height: "500px",
+                overflow: "auto",
+                border: "1px solid #e0e0e0",
+                borderRadius: "4px",
+              }}
+            >
+              {/* Fixed Header */}
+              <div
+                style={{
+                  position: "sticky",
+                  top: 0,
+                  zIndex: 10,
+                  backgroundColor: "#fff",
+                  borderBottom: "2px solid #1976d2",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    padding: "8px 16px",
+                    backgroundColor: "#1976d2",
+                    color: "#fff",
+                    fontWeight: 700,
+                    fontSize: "16px",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.5px",
+                  }}
+                >
+                  {/* Select All Checkbox */}
+                  <div style={{ width: "50px", flexShrink: 0 }}>
                     <Checkbox
-                      checked={
-                        data.length > 0 && selectedRows.length === data.length
-                      }
-                      indeterminate={
-                        selectedRows.length > 0 &&
-                        selectedRows.length < data.length
-                      }
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          dispatch(selectAllRows(data.map((row) => row.id)));
-                        } else {
-                          dispatch(selectAllRows([]));
-                        }
+                      checked={allSelected}
+                      indeterminate={someSelected}
+                      onChange={handleSelectAll}
+                      sx={{
+                        color: "#fff",
+                        "&.Mui-checked": { color: "#fff" },
+                        "&.MuiCheckbox-indeterminate": { color: "#fff" },
+                        padding: "4px",
                       }}
                     />
-                  </TableCell>
+                  </div>
 
-                  {columnOrder.map((col) => (
-                    <DraggableHeader
+                  {/* Column Headers */}
+                  {sortedColumns.map((col) => (
+                    <DraggableColumnHeader
                       key={col.field}
                       column={col}
                       handleSort={handleSort}
@@ -192,51 +286,99 @@ const ReusableTable = ({
                       order={order}
                     />
                   ))}
-                </TableRow>
-              </TableHead>
+                </div>
+              </div>
 
-              <TableBody>
-                {data.map((row) => {
+              {/* Virtualized Body */}
+              <div
+                style={{
+                  height: `${rowVirtualizer.getTotalSize()}px`,
+                  position: "relative",
+                }}
+              >
+                {virtualItems.map((virtualRow) => {
+                  const row = data[virtualRow.index];
                   const isSelected = selectedRows.includes(row.id);
 
                   return (
-                    <StyledRow key={row.id}>
-                      {/* ✅ Row Checkbox */}
-                      <TableCell>
+                    <div
+                      key={row.id}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        height: `${virtualRow.size}px`,
+                        transform: `translateY(${virtualRow.start}px)`,
+                        display: "flex",
+                        alignItems: "center",
+                        padding: "8px 16px",
+                        borderBottom: "1px solid #e0e0e0",
+                        backgroundColor: isSelected ? "#bbdefb" : "transparent",
+                        cursor: "pointer",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = isSelected
+                          ? "#bbdefb"
+                          : "#f5f5f5";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = isSelected
+                          ? "#bbdefb"
+                          : "transparent";
+                      }}
+                    >
+                      {/* Row Checkbox */}
+                      <div style={{ width: "50px", flexShrink: 0 }}>
                         <Checkbox
                           checked={isSelected}
-                          onChange={() => dispatch(toggleRowSelection(row.id))}
+                          onChange={() => handleRowSelect(row.id)}
+                          sx={{ padding: "4px" }}
                         />
-                      </TableCell>
+                      </div>
 
-                      {columnOrder.map((col) => (
-                        <TableCell key={col.field}>{row[col.field]}</TableCell>
+                      {/* Row Data */}
+                      {sortedColumns.map((col) => (
+                        <div
+                          key={col.field}
+                          style={{
+                            flex: 1,
+                            padding: "4px 8px",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {row[col.field]}
+                        </div>
                       ))}
-                    </StyledRow>
+                    </div>
                   );
                 })}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </SortableContext>
-      </DndContext>
+              </div>
+            </div>
+          </SortableContext>
+        </DndContext>
 
-      <TablePagination
-        component="div"
-        count={total}
-        page={page}
-        rowsPerPage={rowsPerPage}
-        rowsPerPageOptions={[5, 10, 15]} // ✅ HERE
-        onPageChange={(e, newPage) => {
-          setPage(newPage);
-        }}
-        onRowsPerPageChange={(e) => {
-          setRowsPerPage(parseInt(e.target.value, 10));
-          setPage(0);
-        }}
-      />
-    </Paper>
-  );
-};
+        <TablePagination
+          component="div"
+          count={total}
+          page={page}
+          rowsPerPage={rowsPerPage}
+          rowsPerPageOptions={[5, 10, 15]} // ✅ HERE
+          onPageChange={(e, newPage) => {
+            setPage(newPage);
+          }}
+          onRowsPerPageChange={(e) => {
+            setRowsPerPage(parseInt(e.target.value, 10));
+            setPage(0);
+          }}
+        />
+      </Paper>
+    );
+  },
+);
 
 export default ReusableTable;
+
+ReusableTable.displayName = "ReusableTable";
