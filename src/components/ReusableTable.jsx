@@ -21,7 +21,6 @@ import {
 
 import { CSS } from "@dnd-kit/utilities";
 import { styled } from "@mui/material/styles";
-import { useVirtualizer } from "@tanstack/react-virtual";
 
 // 🔹 Styled Row Component (moved outside for global access)
 const StyledRow = styled(TableRow)(({ theme }) => ({
@@ -71,8 +70,16 @@ const DraggableColumnHeader = memo(({ column, handleSort, orderBy, order }) => {
       ref={setNodeRef}
       style={{
         ...style,
-        flex: 1,
-        padding: "4px 8px",
+        ...(column.width
+          ? {
+              width: column.width,
+              minWidth: column.width,
+              maxWidth: column.width,
+              flexShrink: 0,
+              boxSizing: "border-box",
+            }
+          : { flex: 1 }),
+        padding: column.field === "id" ? "4px 4px" : "4px 8px",
         cursor: "pointer",
         userSelect: "none",
         touchAction: "none",
@@ -145,20 +152,15 @@ const ReusableTable = memo(
     // Memoized sorted columns
     const sortedColumns = useMemo(() => columnOrder, [columnOrder]);
 
-    // Virtualization setup
-    const parentRef = React.useRef();
-
-    const rowVirtualizer = useVirtualizer({
-      count: data.length,
-      getScrollElement: () => parentRef.current,
-      estimateSize: () => 53, // Estimated row height
-      overscan: 10, // Render 10 extra rows outside visible area
-    });
-
-    // Memoized virtual items
-    const virtualItems = useMemo(
-      () => rowVirtualizer.getVirtualItems(),
-      [rowVirtualizer],
+    const gridTemplateColumns = useMemo(
+      () =>
+        [
+          "50px", // checkbox column
+          ...sortedColumns.map((col) =>
+            col.width ? col.width : "minmax(0, 1fr)",
+          ),
+        ].join(" "),
+      [sortedColumns],
     );
 
     // Memoized handlers
@@ -228,16 +230,8 @@ const ReusableTable = memo(
             items={sortedColumns.map((c) => c.field)}
             strategy={horizontalListSortingStrategy}
           >
-            {/* Virtualized Table Container */}
-            <div
-              ref={parentRef}
-              style={{
-                height: "500px",
-                overflow: "auto",
-                border: "1px solid #e0e0e0",
-                borderRadius: "4px",
-              }}
-            >
+            {/* Virtualized Table Container - Temporarily simplified */}
+            <div style={{ border: "1px solid #e0e0e0", borderRadius: "4px" }}>
               {/* Fixed Header */}
               <div
                 style={{
@@ -250,7 +244,8 @@ const ReusableTable = memo(
               >
                 <div
                   style={{
-                    display: "flex",
+                    display: "grid",
+                    gridTemplateColumns: gridTemplateColumns,
                     alignItems: "center",
                     padding: "8px 16px",
                     backgroundColor: "#1976d2",
@@ -289,43 +284,25 @@ const ReusableTable = memo(
                 </div>
               </div>
 
-              {/* Virtualized Body */}
-              <div
-                style={{
-                  height: `${rowVirtualizer.getTotalSize()}px`,
-                  position: "relative",
-                }}
-              >
-                {virtualItems.map((virtualRow) => {
-                  const row = data[virtualRow.index];
+              {/* Table Body */}
+              <div style={{ maxHeight: "400px", overflow: "auto" }}>
+                {data.map((row, index) => {
                   const isSelected = selectedRows.includes(row.id);
 
                   return (
                     <div
                       key={row.id}
                       style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        height: `${virtualRow.size}px`,
-                        transform: `translateY(${virtualRow.start}px)`,
-                        display: "flex",
+                        display: "grid",
+                        gridTemplateColumns: gridTemplateColumns,
                         alignItems: "center",
                         padding: "8px 16px",
                         borderBottom: "1px solid #e0e0e0",
-                        backgroundColor: isSelected ? "#bbdefb" : "transparent",
-                        cursor: "pointer",
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.backgroundColor = isSelected
+                        backgroundColor: isSelected
                           ? "#bbdefb"
-                          : "#f5f5f5";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.backgroundColor = isSelected
-                          ? "#bbdefb"
-                          : "transparent";
+                          : index % 2 === 0
+                            ? "#f9f9f9"
+                            : "transparent",
                       }}
                     >
                       {/* Row Checkbox */}
@@ -342,8 +319,18 @@ const ReusableTable = memo(
                         <div
                           key={col.field}
                           style={{
-                            flex: 1,
-                            padding: "4px 8px",
+                            ...(col.width
+                              ? {
+                                  width: col.width,
+                                  minWidth: col.width,
+                                  maxWidth: col.width,
+                                  flexShrink: 0,
+                                  boxSizing: "border-box",
+                                  padding: "4px 4px",
+                                  textAlign:
+                                    col.field === "id" ? "center" : "left",
+                                }
+                              : { width: "100%", padding: "4px 8px" }),
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",
@@ -365,7 +352,7 @@ const ReusableTable = memo(
           count={total}
           page={page}
           rowsPerPage={rowsPerPage}
-          rowsPerPageOptions={[5, 10, 15]} // ✅ HERE
+          rowsPerPageOptions={[5, 10, 15]}
           onPageChange={(e, newPage) => {
             setPage(newPage);
           }}

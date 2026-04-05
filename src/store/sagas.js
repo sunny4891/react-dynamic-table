@@ -21,6 +21,7 @@ function* fetchUsersSaga(action) {
 
     yield put(fetchUsersSuccess(response));
   } catch (error) {
+    console.log("Saga error:", error);
     yield put(fetchUsersFailure(error.toString()));
   }
 }

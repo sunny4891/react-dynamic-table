@@ -33,7 +33,7 @@ const UsersPage = () => {
   }, [dispatch, page, rowsPerPage, debouncedSearch, order, orderBy]);
 
   const columns = [
-    { field: "id", headerName: "ID" },
+    { field: "id", headerName: "ID", width: "95px" },
     { field: "name", headerName: "Name" },
     { field: "email", headerName: "Email" },
     { field: "phone", headerName: "Phone" },
