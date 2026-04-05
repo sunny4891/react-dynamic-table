@@ -169,6 +169,14 @@ const ReusableTable = memo(
 
     const shouldUseVirtual = scrollElement && virtualItems.length > 0;
 
+    const rowsPerPageOptions = useMemo(() => {
+      const baseOptions = [5, 10, 15];
+      if (!baseOptions.includes(rowsPerPage)) {
+        return [...baseOptions, rowsPerPage].sort((a, b) => a - b);
+      }
+      return baseOptions;
+    }, [rowsPerPage]);
+
     const gridTemplateColumns = useMemo(
       () =>
         [
@@ -305,7 +313,6 @@ const ReusableTable = memo(
               <div
                 ref={setScrollElement}
                 style={{
-                  height: "400px",
                   overflow: "auto",
                   position: "relative",
                 }}
@@ -450,7 +457,7 @@ const ReusableTable = memo(
           count={total}
           page={page}
           rowsPerPage={rowsPerPage}
-          rowsPerPageOptions={[5, 10, 15]}
+          rowsPerPageOptions={rowsPerPageOptions}
           onPageChange={(e, newPage) => {
             setPage(newPage);
           }}
